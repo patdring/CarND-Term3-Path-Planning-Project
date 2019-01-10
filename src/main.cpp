@@ -9,6 +9,7 @@
 #include "Eigen-3.3/Eigen/QR"
 #include "json.hpp"
 #include "spline.h"
+#include "classifier.h"
 
 using namespace std;
 
@@ -19,6 +20,44 @@ using json = nlohmann::json;
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
+
+vector<vector<double> > Load_State(string file_name)
+{
+    ifstream in_state_(file_name.c_str(), ifstream::in);
+    vector< vector<double >> state_out;
+    string line;
+    
+    
+    while (getline(in_state_, line)) 
+    {
+        istringstream iss(line);
+    	vector<double> x_coord;
+    	
+    	string token;
+    	while( getline(iss,token,','))
+    	{
+    	    x_coord.push_back(stod(token));
+    	}
+    	state_out.push_back(x_coord);
+    }
+    return state_out;
+}
+vector<string> Load_Label(string file_name)
+{
+    ifstream in_label_(file_name.c_str(), ifstream::in);
+    vector< string > label_out;
+    string line;
+    while (getline(in_label_, line)) 
+    {
+    	istringstream iss(line);
+    	string label;
+	    iss >> label;
+    
+	    label_out.push_back(label);
+    }
+    return label_out;
+    
+}
 
 // Checks if the SocketIO event has JSON data.
 // If there is data the JSON object in string format will be returned,
@@ -169,9 +208,40 @@ int lane = 1;
 // reference velocity to target [mph]
 double ref_vel = 0.0; 
 
+struct vehicle {
+  int id;
+  double x;
+  double y; 
+  double vx; 
+  double vy;
+  double speed;
+  double s;
+  double d;
+  double s_dot;
+  double d_dot;
+  string lane_guess;
+};
+  
+vector<vehicle> prev_other_vehicles;
+
+GNB gnb = GNB();
+
+std::chrono::steady_clock::time_point newT;
+std::chrono::steady_clock::time_point oldT;
+
 int main() {
   uWS::Hub h;
+ 
+  vector< vector<double> > X_train = Load_State("../data/train_states.txt");   
+  vector< string > Y_train  = Load_Label("../data/train_labels.txt");
 
+  cout << "Start Naive Bayes Classifier training ..." << endl;
+  cout << "X_train number of elements " << X_train.size() << endl;
+  cout << "X_train element size " << X_train[0].size() << endl;
+  cout << "Y_train number of elements " << Y_train.size() << endl;
+
+  gnb.train(X_train, Y_train);
+  cout << "finished!" << endl;
   // Load up map values for waypoint's x,y,s and d normalized normal vectors
   vector<double> map_waypoints_x;
   vector<double> map_waypoints_y;
@@ -183,7 +253,6 @@ int main() {
   string map_file_ = "../data/highway_map.csv";
   // The max s value before wrapping around the track back to 0
   double max_s = 6945.554;
-  
   
   ifstream in_map_(map_file_.c_str(), ifstream::in);
 
@@ -243,13 +312,87 @@ int main() {
 
           // Sensor Fusion Data, a list of all other cars on the same side of the road.
           auto sensor_fusion = j[1]["sensor_fusion"];
-
+          newT = std::chrono::steady_clock::now();
+          
           int prev_size = previous_path_x.size();
 
           json msgJson;
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
-  
+          vector<vehicle> other_vehicles;
+                  
+          for (int i=0; i < sensor_fusion.size(); i++) {
+            vehicle v;
+            
+            v.id = sensor_fusion[i][0];
+            v.x = sensor_fusion[i][1];
+            v.y = sensor_fusion[i][2];
+            v.vx = sensor_fusion[i][3]; 
+            v.vy = sensor_fusion[i][4]; 
+            v.s = sensor_fusion[i][5];
+            v.d = sensor_fusion[i][6];
+            v.s_dot = 0;
+            v.d_dot = 0;
+            v.lane_guess = "";
+            
+            if (prev_other_vehicles.size() != 0) {
+              v.s_dot = (v.s - prev_other_vehicles[i].s) / ((std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/1000.0)); 
+              v.d_dot = (v.d - prev_other_vehicles[i].d) / ((std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/1000.0));
+              cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;         
+              // observation is a tuple with 4 values: s, d, s_dot and d_dot.
+              vector<double> coords (4,0);
+              coords[0] = v.s;
+              coords[1] = v.d;
+              coords[2] = v.s_dot;
+              coords[3] = v.d_dot;
+                      
+              v.lane_guess = gnb.predict(coords);
+            } 
+            
+            other_vehicles.push_back(v);            
+          }
+          oldT = newT;
+          prev_other_vehicles.clear();
+         
+          for (int i=0; i < other_vehicles.size(); i++) {
+            prev_other_vehicles.push_back(other_vehicles[i]);
+          }
+          
+          cout << "No. of other vehicles is " << other_vehicles.size() << endl;
+          
+          cout << "x   " << car_x << endl;
+          cout << "y   " << car_y << endl;
+          cout << "s   " << car_s << endl;
+          cout << "d   " << car_d << endl;
+          cout << "yaw " << car_yaw << endl;
+          cout << "s   " << car_speed << endl;
+          
+          cout << "+++++++++++++++++++++++++" << endl;
+          
+          for (int i=0; i < other_vehicles.size(); i++) {
+            cout << "id  " << other_vehicles[i].id << endl;
+            cout << "x   "  << other_vehicles[i].x << endl;
+            cout << "y   "  << other_vehicles[i].y << endl;
+            cout << "vx  " << other_vehicles[i].vx << endl;
+            cout << "vy  " << other_vehicles[i].vy << endl;
+            cout << "s   "  << other_vehicles[i].s << endl;
+            cout << "d   "  << other_vehicles[i].d << endl;
+            cout << "s.  "  << other_vehicles[i].s_dot << endl;
+            cout << "d.  "  << other_vehicles[i].d_dot << endl;
+            cout << "l   "   << other_vehicles[i].lane_guess << endl;
+            cout << "-------------------------" << endl;
+          }
+          /*
+          cout << " Sample Sensor Fusion Data" << endl;
+          cout << "id " << sensor_fusion[0][0] << endl;
+          cout << "x  "  << sensor_fusion[0][1] << endl;
+          cout << "y  "  << sensor_fusion[0][2] << endl;
+          cout << "vx " << sensor_fusion[0][3] << endl;
+          cout << "vy " << sensor_fusion[0][4] << endl;
+          cout << "s  "  << sensor_fusion[0][5] << endl;
+          cout << "d  "  << sensor_fusion[0][6] << endl;
+          */
+             
           if (ref_vel < 49.5) {
               ref_vel += .224;
           }
@@ -311,8 +454,7 @@ int main() {
             double shift_y = ptsy[i]-ref_y;
 
             ptsx[i] = (shift_x*cos(0-ref_yaw)-shift_y*sin(0-ref_yaw));
-            ptsy[i] = (shift_x*sin(0-ref_yaw)+shift_y*cos(0-ref_yaw));
- 
+            ptsy[i] = (shift_x*sin(0-ref_yaw)+shift_y*cos(0-ref_yaw)); 
           }
                 
           // create a spline
@@ -351,8 +493,8 @@ int main() {
             double y_ref = y_point;
 
             // rotate back to normal after rotating it earlier
-            x_point = (x_ref * cos(ref_yaw)-y_ref*sin(ref_yaw));
-            y_point = (x_ref * sin(ref_yaw)+y_ref*cos(ref_yaw));
+            x_point = (x_ref*cos(ref_yaw) - y_ref*sin(ref_yaw));
+            y_point = (x_ref*sin(ref_yaw) + y_ref*cos(ref_yaw));
 
             x_point += ref_x;
             y_point += ref_y;

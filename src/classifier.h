@@ -5,7 +5,7 @@
 #include <fstream>
 #include <math.h>
 #include <vector>
-#include "Dense"
+#include "Eigen-3.3/Eigen/Dense"
 
 using namespace std;
 using Eigen::ArrayXd;
