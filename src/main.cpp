@@ -216,18 +216,21 @@ struct vehicle {
   double vy;
   double speed;
   double s;
+  double s_rel;
+  double pred_s;
   double d;
   double s_dot;
   double d_dot;
-  string lane_guess;
+  string pred_lane;
+  int curr_lane;
 };
   
 vector<vehicle> prev_other_vehicles;
 
 GNB gnb = GNB();
 
-std::chrono::steady_clock::time_point newT;
-std::chrono::steady_clock::time_point oldT;
+std::chrono::steady_clock::time_point newT = std::chrono::steady_clock::now();
+std::chrono::steady_clock::time_point oldT = newT;
 
 int main() {
   uWS::Hub h;
@@ -284,7 +287,8 @@ int main() {
     //auto sdata = string(data).substr(0, length);
     //cout << sdata << endl;
     if (length && length > 2 && data[0] == '4' && data[1] == '2') {
-
+      newT = std::chrono::steady_clock::now();
+      auto time_diff = std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count();
       auto s = hasData(data);
 
       if (s != "") {
@@ -315,7 +319,10 @@ int main() {
           newT = std::chrono::steady_clock::now();
           
           int prev_size = previous_path_x.size();
-
+          if(prev_size > 0) {
+            car_s = end_path_s;
+          }
+          
           json msgJson;
 
           // TODO: define a path made up of (x,y) points that the car will visit sequentially every .02 seconds
@@ -328,38 +335,69 @@ int main() {
             v.x = sensor_fusion[i][1];
             v.y = sensor_fusion[i][2];
             v.vx = sensor_fusion[i][3]; 
-            v.vy = sensor_fusion[i][4]; 
+            v.vy = sensor_fusion[i][4];
+            v.speed = sqrt(v.vx*v.vx+v.vy*v.vy);
             v.s = sensor_fusion[i][5];
+            v.s_rel = v.s - car_s;
             v.d = sensor_fusion[i][6];
             v.s_dot = 0;
             v.d_dot = 0;
-            v.lane_guess = "";
+            v.pred_lane = "";
+            v.pred_s = v.s + ((double)prev_size*0.02*v.speed);
+                      
+            // vehicle is in front of us in a range of 30 meters in future 
+            // vehicle not on the same line and check the car is in front of the ego car
+            // TODO
             
+            if (v.d > 0 && v.d < 4) {
+              v.curr_lane = 0;
+            } else if (v.d > 4 && v.d < 8) {
+              v.curr_lane = 1;
+            } else if (v.d > 8 and v.d < 12) {
+              v.curr_lane = 2;
+            }
+                
             if (prev_other_vehicles.size() != 0) {
-              v.s_dot = (v.s - prev_other_vehicles[i].s) / ((std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/1000.0)); 
-              v.d_dot = (v.d - prev_other_vehicles[i].d) / ((std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/1000.0));
-              cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;         
+              
+              v.s_dot = (abs(v.s_rel - prev_other_vehicles[i].s_rel)) / (time_diff); 
+              v.d_dot = (abs(v.d - prev_other_vehicles[i].d)) / (time_diff);
+              
+              //cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;         
               // observation is a tuple with 4 values: s, d, s_dot and d_dot.
               vector<double> coords (4,0);
-              coords[0] = v.s;
+              coords[0] = v.s_rel;
               coords[1] = v.d;
               coords[2] = v.s_dot;
               coords[3] = v.d_dot;
                       
-              v.lane_guess = gnb.predict(coords);
+              v.pred_lane = gnb.predict(coords);
             } 
             
             other_vehicles.push_back(v);            
           }
-          oldT = newT;
+          //cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;
+          
           prev_other_vehicles.clear();
          
           for (int i=0; i < other_vehicles.size(); i++) {
             prev_other_vehicles.push_back(other_vehicles[i]);
           }
           
-          cout << "No. of other vehicles is " << other_vehicles.size() << endl;
+          vector<vehicle> cons_other_vehicles;
+           
+          bool is_vehicle_left= false;
+          bool is_vehicle_right = false;
+          bool is_vehicle_front = false;
           
+          for (int i=0; i < other_vehicles.size(); i++) {       
+            if (other_vehicles[i].s_rel < 0.0 || other_vehicles[i].s_rel > 30.0) {
+              continue;
+            }
+            cons_other_vehicles.push_back(other_vehicles[i]); 
+          }   
+            
+           
+          /*
           cout << "x   " << car_x << endl;
           cout << "y   " << car_y << endl;
           cout << "s   " << car_s << endl;
@@ -368,35 +406,57 @@ int main() {
           cout << "s   " << car_speed << endl;
           
           cout << "+++++++++++++++++++++++++" << endl;
+          */
           
-          for (int i=0; i < other_vehicles.size(); i++) {
-            cout << "id  " << other_vehicles[i].id << endl;
-            cout << "x   "  << other_vehicles[i].x << endl;
-            cout << "y   "  << other_vehicles[i].y << endl;
-            cout << "vx  " << other_vehicles[i].vx << endl;
-            cout << "vy  " << other_vehicles[i].vy << endl;
-            cout << "s   "  << other_vehicles[i].s << endl;
-            cout << "d   "  << other_vehicles[i].d << endl;
-            cout << "s.  "  << other_vehicles[i].s_dot << endl;
-            cout << "d.  "  << other_vehicles[i].d_dot << endl;
-            cout << "l   "   << other_vehicles[i].lane_guess << endl;
+          
+          for (int i=0; i < cons_other_vehicles.size(); i++) {
+            
+            cout << "No. of other vehicles is " << cons_other_vehicles.size() << endl;
+            cout << "id    " << cons_other_vehicles[i].id << endl;
+            cout << "x     " << cons_other_vehicles[i].x << endl;
+            cout << "y     " << cons_other_vehicles[i].y << endl;
+            cout << "vx    " << cons_other_vehicles[i].vx << endl;
+            cout << "vy    " << cons_other_vehicles[i].vy << endl;
+            cout << "s     " << cons_other_vehicles[i].s << endl;
+            cout << "s_rel " << cons_other_vehicles[i].s_rel << endl;
+            cout << "d     " << cons_other_vehicles[i].d << endl;
+            cout << "s.    " << cons_other_vehicles[i].s_dot << endl;
+            cout << "d.    " << cons_other_vehicles[i].d_dot << endl;
+            cout << "cl    " << cons_other_vehicles[i].curr_lane << endl;
+            cout << "pl    " << cons_other_vehicles[i].pred_lane << endl;
             cout << "-------------------------" << endl;
           }
-          /*
-          cout << " Sample Sensor Fusion Data" << endl;
-          cout << "id " << sensor_fusion[0][0] << endl;
-          cout << "x  "  << sensor_fusion[0][1] << endl;
-          cout << "y  "  << sensor_fusion[0][2] << endl;
-          cout << "vx " << sensor_fusion[0][3] << endl;
-          cout << "vy " << sensor_fusion[0][4] << endl;
-          cout << "s  "  << sensor_fusion[0][5] << endl;
-          cout << "d  "  << sensor_fusion[0][6] << endl;
-          */
-             
-          if (ref_vel < 49.5) {
-              ref_vel += .224;
+                       
+          for (int i=0; i < cons_other_vehicles.size(); i++) {
+            
+            if(cons_other_vehicles[i].curr_lane == lane) {
+              is_vehicle_front |= cons_other_vehicles[i].pred_s > car_s && (cons_other_vehicles[i].pred_s - car_s) < 30;
+            } else if((cons_other_vehicles[i].curr_lane - lane) == -1) {
+              is_vehicle_left |= (cons_other_vehicles[i].pred_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
+            } else if((cons_other_vehicles[i].curr_lane - lane) == 1) {
+              is_vehicle_right |= (cons_other_vehicles[i].pred_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
+            }
+            
           }
+                   
+          cout << "is_vehicle_left  " << is_vehicle_left << endl;
+          cout << "is_vehicle_right " << is_vehicle_right << endl;
+          cout << "is_vehicle_front " << is_vehicle_front << endl;
           
+          if(is_vehicle_front) {
+            if(!is_vehicle_left && lane > 0) {
+              lane--;
+            } else if(!is_vehicle_right && lane !=2) {
+              lane++;
+            } else if(!is_vehicle_left && lane !=2) {
+              lane++;
+            } else {
+              ref_vel -= .224;
+            }
+          } else if(ref_vel < 49.5){
+            ref_vel += .224;
+          }
+                
           // Create a list of evenly spaced (30m) waypoints(x,y)
           vector<double> ptsx;
           vector<double> ptsy;             
@@ -507,9 +567,10 @@ int main() {
           msgJson["next_y"] = next_y_vals;
 
           auto msg = "42[\"control\","+ msgJson.dump()+"]";
-
+        
           //this_thread::sleep_for(chrono::milliseconds(1000));
-          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);       
+          ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);   
+          oldT = newT; 
         }
       } else {
         // Manual driving
