@@ -207,6 +207,7 @@ vector<double> getXY(double s, double d, const vector<double> &maps_s, const vec
 int lane = 1;
 // reference velocity to target [mph]
 double ref_vel = 0.0; 
+int total_detected_lane_changes = 0;
 
 struct vehicle {
   int id;
@@ -359,17 +360,18 @@ int main() {
                 
             if (prev_other_vehicles.size() != 0) {
               
-              v.s_dot = (abs(v.s_rel - prev_other_vehicles[i].s_rel)) / (time_diff); 
-              v.d_dot = (abs(v.d - prev_other_vehicles[i].d)) / (time_diff);
+              v.s_dot = (v.s_rel - prev_other_vehicles[i].s_rel) / ((double)prev_size*0.02); 
+              v.d_dot = (v.d - prev_other_vehicles[i].d) / ((double)prev_size*0.02);
               
               //cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;         
               // observation is a tuple with 4 values: s, d, s_dot and d_dot.
-              vector<double> coords (4,0);
-              coords[0] = v.s_rel;
-              coords[1] = v.d;
-              coords[2] = v.s_dot;
-              coords[3] = v.d_dot;
-                      
+              vector<double> coords;
+               
+              coords.push_back(abs(v.s_rel));
+              coords.push_back(v.d);
+              coords.push_back(abs(v.s_dot));
+              coords.push_back(v.d_dot);
+                
               v.pred_lane = gnb.predict(coords);
             } 
             
@@ -385,12 +387,12 @@ int main() {
           
           vector<vehicle> cons_other_vehicles;
            
-          bool is_vehicle_left= false;
-          bool is_vehicle_right = false;
-          bool is_vehicle_front = false;
+          bool is_vehicle_left = 0;
+          bool is_vehicle_right = 0;
+          bool is_vehicle_front = 0;
           
           for (int i=0; i < other_vehicles.size(); i++) {       
-            if (other_vehicles[i].s_rel < 0.0 || other_vehicles[i].s_rel > 30.0) {
+            if (other_vehicles[i].s_rel < -30.0 || other_vehicles[i].s_rel > 30.0) {
               continue;
             }
             cons_other_vehicles.push_back(other_vehicles[i]); 
@@ -424,7 +426,11 @@ int main() {
             cout << "d.    " << cons_other_vehicles[i].d_dot << endl;
             cout << "cl    " << cons_other_vehicles[i].curr_lane << endl;
             cout << "pl    " << cons_other_vehicles[i].pred_lane << endl;
-            cout << "-------------------------" << endl;
+            cout << "--------------------------------" << endl;
+            
+            if (cons_other_vehicles[i].pred_lane == "right" || cons_other_vehicles[i].pred_lane == "left") {
+              total_detected_lane_changes++;
+            }
           }
                        
           for (int i=0; i < cons_other_vehicles.size(); i++) {
@@ -438,7 +444,8 @@ int main() {
             }
             
           }
-                   
+            
+          cout << "No. of (OVs) lane changes detected  " << total_detected_lane_changes << endl;
           cout << "is_vehicle_left  " << is_vehicle_left << endl;
           cout << "is_vehicle_right " << is_vehicle_right << endl;
           cout << "is_vehicle_front " << is_vehicle_front << endl;
