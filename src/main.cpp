@@ -362,17 +362,18 @@ int main() {
               
               v.s_dot = (v.s_rel - prev_other_vehicles[i].s_rel) / ((double)prev_size*0.02); 
               v.d_dot = (v.d - prev_other_vehicles[i].d) / ((double)prev_size*0.02);
-              
-              //cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;         
+                    
               // observation is a tuple with 4 values: s, d, s_dot and d_dot.
-              vector<double> coords;
+              if (abs(v.s_dot) < 13.0 && ( v.d_dot > -2.5 && v.d_dot < 2.5) {
+                vector<double> coords;
                
-              coords.push_back(abs(v.s_rel));
-              coords.push_back(v.d);
-              coords.push_back(abs(v.s_dot));
-              coords.push_back(v.d_dot);
+                coords.push_back(abs(v.s_rel));
+                coords.push_back(v.d);
+                coords.push_back(abs(v.s_dot));
+                coords.push_back(v.d_dot);
                 
-              v.pred_lane = gnb.predict(coords);
+                v.pred_lane = gnb.predict(coords);
+              }
             } 
             
             other_vehicles.push_back(v);            
