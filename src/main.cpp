@@ -233,6 +233,19 @@ GNB gnb = GNB();
 std::chrono::steady_clock::time_point newT = std::chrono::steady_clock::now();
 std::chrono::steady_clock::time_point oldT = newT;
 
+/*
+typedef enum
+{
+  KEEP_LANE = 0,
+  CHANGE_LEFT,
+  CHANGE_RIGHT,
+  PREPARE_CHANGE_LEFT,
+  PREPARE_CHANGE_RIGHT  
+} path_planner_state_t;
+
+path_planner_state_t pp_state = KEEP_LANE;
+*/
+
 int main() {
   uWS::Hub h;
  
@@ -364,7 +377,7 @@ int main() {
               v.d_dot = (v.d - prev_other_vehicles[i].d) / ((double)prev_size*0.02);
                     
               // observation is a tuple with 4 values: s, d, s_dot and d_dot.
-              if (abs(v.s_dot) < 13.0 && ( v.d_dot > -2.5 && v.d_dot < 2.5) {
+              if (abs(v.s_dot) < 13.0 && ( v.d_dot > -2.5 && v.d_dot < 2.5)) {
                 vector<double> coords;
                
                 coords.push_back(abs(v.s_rel));
@@ -373,9 +386,16 @@ int main() {
                 coords.push_back(v.d_dot);
                 
                 v.pred_lane = gnb.predict(coords);
+                
+                if (v.pred_lane == "left" && lane > 0) {
+                   v.curr_lane--;
+                }               
+                if (v.pred_lane == "right" && lane != 2) {
+                   v.curr_lane++;
+                }
+                
               }
-            } 
-            
+            }           
             other_vehicles.push_back(v);            
           }
           //cout << "time duration: "<< std::chrono::duration_cast<std::chrono::milliseconds>(newT - oldT).count()/100.0 << endl;
@@ -387,11 +407,7 @@ int main() {
           }
           
           vector<vehicle> cons_other_vehicles;
-           
-          bool is_vehicle_left = 0;
-          bool is_vehicle_right = 0;
-          bool is_vehicle_front = 0;
-          
+                     
           for (int i=0; i < other_vehicles.size(); i++) {       
             if (other_vehicles[i].s_rel < -30.0 || other_vehicles[i].s_rel > 30.0) {
               continue;
@@ -413,8 +429,6 @@ int main() {
           
           
           for (int i=0; i < cons_other_vehicles.size(); i++) {
-            
-            cout << "No. of other vehicles is " << cons_other_vehicles.size() << endl;
             cout << "id    " << cons_other_vehicles[i].id << endl;
             cout << "x     " << cons_other_vehicles[i].x << endl;
             cout << "y     " << cons_other_vehicles[i].y << endl;
@@ -427,44 +441,114 @@ int main() {
             cout << "d.    " << cons_other_vehicles[i].d_dot << endl;
             cout << "cl    " << cons_other_vehicles[i].curr_lane << endl;
             cout << "pl    " << cons_other_vehicles[i].pred_lane << endl;
-            cout << "--------------------------------" << endl;
+            cout << "---------------------------------------" << endl;
             
             if (cons_other_vehicles[i].pred_lane == "right" || cons_other_vehicles[i].pred_lane == "left") {
               total_detected_lane_changes++;
             }
           }
-                       
-          for (int i=0; i < cons_other_vehicles.size(); i++) {
+          
+          /*
+          double vehicle_min_dist = 30.0;
+          double target_vel = 49.5;
+          
+          // path planner finite state machine                 
+          for (int i=0; i < cons_other_vehicles.size(); i++) { 
             
+            switch (pp_state) {
+              case KEEP_LANE:                                           
+                // is car in same lane and in front of our ego vehicle?
+                double curr_dist = cons_other_vehicles[i].pred_s - car_s;
+                if (cons_other_vehicles[i].curr_lane == lane && cons_other_vehicles[i].pred_s > car_s && curr_dist < vehicle_min_dist) {               
+                  // search car wich is directly in front of our ego car and takeover its speed           
+                  vehicle_min_dist = curr_dist;
+                  target_vel = cons_other_vehicles[i].speed;
+                 
+                  if ((cons_other_vehicles[i].curr_lane - lane) == -1 && lane > 0) {
+                    pp_state = PREPARE_CHANGE_LEFT;              
+                    break;
+                  }
+ 
+                }                                                                                  
+                pp_state = KEEP_LANE;              
+                break;
+              case CHANGE_LEFT:
+                break;
+              case CHANGE_RIGHT:
+                break;
+              case PREPARE_CHANGE_LEFT:
+                break;
+              case PREPARE_CHANGE_RIGHT:
+                break;
+            }
+          }
+          
+          if (ref_vel < target_vel) {
+            ref_vel += 1.12;
+          }
+              
+          if (ref_vel > target_vel) {
+            ref_vel -= 1.12;
+          }  
+        
+          cout << "No. of other vehicles in range of +/- 30m: " << cons_other_vehicles.size() << endl;
+          cout << "No. of (OVs) lane changes detected:  " << total_detected_lane_changes << endl;
+          */
+          
+          double target_vel = 49.5;
+          
+          double left_lane_vel = 49.5;
+          double right_lane_vel = 49.5;
+          double front_lane_vel = 49.5;
+          
+          bool is_vehicle_left = 0;
+          bool is_vehicle_right = 0;
+          bool is_vehicle_front = 0;
+          
+          for (int i=0; i < cons_other_vehicles.size(); i++) {  
             if(cons_other_vehicles[i].curr_lane == lane) {
               is_vehicle_front |= cons_other_vehicles[i].pred_s > car_s && (cons_other_vehicles[i].pred_s - car_s) < 30;
+              front_lane_vel = cons_other_vehicles[i].speed;            
             } else if((cons_other_vehicles[i].curr_lane - lane) == -1) {
               is_vehicle_left |= (cons_other_vehicles[i].pred_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
+              left_lane_vel = cons_other_vehicles[i].speed;
             } else if((cons_other_vehicles[i].curr_lane - lane) == 1) {
               is_vehicle_right |= (cons_other_vehicles[i].pred_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
-            }
-            
+              right_lane_vel = cons_other_vehicles[i].speed;
+            }        
           }
             
-          cout << "No. of (OVs) lane changes detected  " << total_detected_lane_changes << endl;
+          cout << "No. of other vehicles in range of +/- 30m: " << cons_other_vehicles.size() << endl;
+          cout << "No. of (OVs) lane changes detected:  " << total_detected_lane_changes << endl;
           cout << "is_vehicle_left  " << is_vehicle_left << endl;
           cout << "is_vehicle_right " << is_vehicle_right << endl;
           cout << "is_vehicle_front " << is_vehicle_front << endl;
           
           if(is_vehicle_front) {
+            target_vel = front_lane_vel;
             if(!is_vehicle_left && lane > 0) {
+              target_vel = left_lane_vel;
               lane--;
-            } else if(!is_vehicle_right && lane !=2) {
+            } else if((!is_vehicle_right && lane !=2) || (!is_vehicle_left && lane !=2)) {
+              target_vel = right_lane_vel;
               lane++;
+              /*
             } else if(!is_vehicle_left && lane !=2) {
+              target_vel = right_lane_vel;
               lane++;
+              */
             } else {
-              ref_vel -= .224;
+              if (ref_vel < target_vel && ref_vel < 49.5) {
+                ref_vel += 0.488;
+              }         
+              if (ref_vel > target_vel) {
+                ref_vel -= 0.488;
+              } 
             }
-          } else if(ref_vel < 49.5){
-            ref_vel += .224;
+          } else if(ref_vel < target_vel && ref_vel < 49.5) {
+            ref_vel += 0.488;
           }
-                
+            
           // Create a list of evenly spaced (30m) waypoints(x,y)
           vector<double> ptsx;
           vector<double> ptsy;             
