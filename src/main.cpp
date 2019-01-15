@@ -26,8 +26,7 @@ vector<vector<double> > Load_State(string file_name)
     ifstream in_state_(file_name.c_str(), ifstream::in);
     vector< vector<double >> state_out;
     string line;
-    
-    
+     
     while (getline(in_state_, line)) 
     {
         istringstream iss(line);
@@ -357,8 +356,10 @@ int main() {
             v.s_dot = 0;
             v.d_dot = 0;
             v.pred_lane = "";
+            // predict s
             v.pred_s = v.s + ((double)prev_size*0.02*v.speed);
-                                  
+                     
+            // set lane
             if (v.d > 0 && v.d < 4) {
               v.curr_lane = 0;
             } else if (v.d > 4 && v.d < 8) {
@@ -372,7 +373,7 @@ int main() {
               v.s_dot = (v.s_rel - prev_other_vehicles[i].s_rel) / ((double)prev_size*0.02); 
               v.d_dot = (v.d - prev_other_vehicles[i].d) / ((double)prev_size*0.02);
                     
-              // observation is a tuple with 4 values: s, d, s_dot and d_dot.
+              // observation is a tuple with 4 values: s, d, s_dot and d_dot. Set limits according training data
               if (abs(v.s_dot) < 13.0 && ( v.d_dot > -2.5 && v.d_dot < 2.5)) {
                 vector<double> coords;
                
@@ -383,6 +384,7 @@ int main() {
                 
                 v.pred_lane = gnb.predict(coords);
                 
+                // vehicle is changing lane, so set according param. for prediction (s)
                 if (v.pred_lane == "left" && lane > 0) {
                    v.curr_lane--;
                 }               
@@ -403,15 +405,15 @@ int main() {
           }
           
           vector<vehicle> cons_other_vehicles;
-                     
+              
+          // sorting out data/vehicles that is not taken into account
           for (int i=0; i < other_vehicles.size(); i++) {       
             if (other_vehicles[i].s_rel < -30.0 || other_vehicles[i].s_rel > 30.0) {
               continue;
             }
             cons_other_vehicles.push_back(other_vehicles[i]); 
           }   
-            
-           
+                     
           /*
           cout << "x   " << car_x << endl;
           cout << "y   " << car_y << endl;
@@ -422,8 +424,7 @@ int main() {
           
           cout << "+++++++++++++++++++++++++" << endl;
           */
-          
-          
+                    
           for (int i=0; i < cons_other_vehicles.size(); i++) {
             cout << "id    " << cons_other_vehicles[i].id << endl;
             cout << "x     " << cons_other_vehicles[i].x << endl;
@@ -439,6 +440,7 @@ int main() {
             cout << "pl    " << cons_other_vehicles[i].pred_lane << endl;
             cout << "---------------------------------------" << endl;
             
+            // set debug var of lane changes because they happen not so many times
             if (cons_other_vehicles[i].pred_lane == "right" || cons_other_vehicles[i].pred_lane == "left") {
               total_detected_lane_changes++;
             }
@@ -494,7 +496,8 @@ int main() {
           bool is_vehicle_left = 0;
           bool is_vehicle_right = 0;
           bool is_vehicle_front = 0;
-                  
+                 
+          // Detect cars 
           for (int i=0; i < cons_other_vehicles.size(); i++) {  
             if(cons_other_vehicles[i].curr_lane == lane) {
               is_vehicle_front |= cons_other_vehicles[i].pred_s > car_s && (cons_other_vehicles[i].pred_s - car_s) < 30;           
@@ -511,22 +514,24 @@ int main() {
           cout << "is_vehicle_right " << is_vehicle_right << endl;
           cout << "is_vehicle_front " << is_vehicle_front << endl;
           
-          double speed_diff = 0;
+          double speed_diff = 0.0;
          
+          // Behaviour planner
           if (is_vehicle_front) { 
-            // case no vehicle left and it's possible to change
+            // case: no vehicle left and it's possible to change
             if (!is_vehicle_left && lane > 0) {          
               lane--; 
-            // case no vehicle right and it's possible to change
+            // case: no vehicle right and it's possible to change
             } else if (!is_vehicle_right && lane != 2) {
               lane++; 
+            // case: it's not possible to change lanes so reduce speed
             } else {
-              speed_diff -= .224;
+              speed_diff -= 0.224;
             }
           } else {
-            // case ego car not on center lane
+            // case: no vehicle in front so increase speed to the allowed limit
             if (ref_vel < 49.5) {
-              speed_diff += .224;
+              speed_diff += 0.224;
             }
           }
               
