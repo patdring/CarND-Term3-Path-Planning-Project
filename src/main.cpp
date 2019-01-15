@@ -358,11 +358,7 @@ int main() {
             v.d_dot = 0;
             v.pred_lane = "";
             v.pred_s = v.s + ((double)prev_size*0.02*v.speed);
-                      
-            // vehicle is in front of us in a range of 30 meters in future 
-            // vehicle not on the same line and check the car is in front of the ego car
-            // TODO
-            
+                                  
             if (v.d > 0 && v.d < 4) {
               v.curr_lane = 0;
             } else if (v.d > 4 && v.d < 8) {
@@ -494,61 +490,46 @@ int main() {
           cout << "No. of other vehicles in range of +/- 30m: " << cons_other_vehicles.size() << endl;
           cout << "No. of (OVs) lane changes detected:  " << total_detected_lane_changes << endl;
           */
-          
-          double target_vel = 49.5;
-          
-          double left_lane_vel = 49.5;
-          double right_lane_vel = 49.5;
-          double front_lane_vel = 49.5;
-          
+                
           bool is_vehicle_left = 0;
           bool is_vehicle_right = 0;
           bool is_vehicle_front = 0;
-          
+                  
           for (int i=0; i < cons_other_vehicles.size(); i++) {  
             if(cons_other_vehicles[i].curr_lane == lane) {
-              is_vehicle_front |= cons_other_vehicles[i].pred_s > car_s && (cons_other_vehicles[i].pred_s - car_s) < 30;
-              front_lane_vel = cons_other_vehicles[i].speed;            
-            } else if((cons_other_vehicles[i].curr_lane - lane) == -1) {
-              is_vehicle_left |= (cons_other_vehicles[i].pred_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
-              left_lane_vel = cons_other_vehicles[i].speed;
+              is_vehicle_front |= cons_other_vehicles[i].pred_s > car_s && (cons_other_vehicles[i].pred_s - car_s) < 30;           
+            } else if((cons_other_vehicles[i].curr_lane - lane) == -1) {                            
+              is_vehicle_left |= (car_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
             } else if((cons_other_vehicles[i].curr_lane - lane) == 1) {
-              is_vehicle_right |= (cons_other_vehicles[i].pred_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
-              right_lane_vel = cons_other_vehicles[i].speed;
+              is_vehicle_right |= (car_s+30) > cons_other_vehicles[i].pred_s  && (car_s-30) < cons_other_vehicles[i].pred_s;
             }        
           }
-            
+
           cout << "No. of other vehicles in range of +/- 30m: " << cons_other_vehicles.size() << endl;
           cout << "No. of (OVs) lane changes detected:  " << total_detected_lane_changes << endl;
           cout << "is_vehicle_left  " << is_vehicle_left << endl;
           cout << "is_vehicle_right " << is_vehicle_right << endl;
           cout << "is_vehicle_front " << is_vehicle_front << endl;
           
-          if(is_vehicle_front) {
-            target_vel = front_lane_vel;
-            if(!is_vehicle_left && lane > 0) {
-              target_vel = left_lane_vel;
-              lane--;
-            } else if((!is_vehicle_right && lane !=2) || (!is_vehicle_left && lane !=2)) {
-              target_vel = right_lane_vel;
-              lane++;
-              /*
-            } else if(!is_vehicle_left && lane !=2) {
-              target_vel = right_lane_vel;
-              lane++;
-              */
+          double speed_diff = 0;
+         
+          if (is_vehicle_front) { 
+            // case no vehicle left and it's possible to change
+            if (!is_vehicle_left && lane > 0) {          
+              lane--; 
+            // case no vehicle right and it's possible to change
+            } else if (!is_vehicle_right && lane != 2) {
+              lane++; 
             } else {
-              if (ref_vel < target_vel && ref_vel < 49.5) {
-                ref_vel += 0.488;
-              }         
-              if (ref_vel > target_vel) {
-                ref_vel -= 0.488;
-              } 
+              speed_diff -= .224;
             }
-          } else if(ref_vel < target_vel && ref_vel < 49.5) {
-            ref_vel += 0.488;
+          } else {
+            // case ego car not on center lane
+            if (ref_vel < 49.5) {
+              speed_diff += .224;
+            }
           }
-            
+              
           // Create a list of evenly spaced (30m) waypoints(x,y)
           vector<double> ptsx;
           vector<double> ptsy;             
@@ -634,7 +615,14 @@ int main() {
             
           // fill up the rest of our path planner after filling it with prev. points, here we output always 50 points
           for(int i=1; i <= 50-previous_path_x.size(); i++) {  
-                   
+            //limit speed and acc
+            ref_vel += speed_diff;
+            if (ref_vel > 49.5) {
+              ref_vel = 49.5;
+            } else if (ref_vel < 0.224) {
+              ref_vel = 0.224;
+            }
+            
             double N = (target_dist/(.02*ref_vel/2.24));
             double x_point = x_add_on+(target_x)/N;
             double y_point = s(x_point);
