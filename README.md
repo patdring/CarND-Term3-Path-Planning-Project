@@ -4,16 +4,98 @@ Self-Driving Car Engineer Nanodegree Program
 ### Goals
 In this project your goal is to safely navigate around a virtual highway with other traffic that is driving +-10 MPH of the 50 MPH speed limit. You will be provided the car's localization and sensor fusion data, there is also a sparse map list of waypoints around the highway. The car should try to go as close as possible to the 50 MPH speed limit, which means passing slower traffic when possible, note that other cars will try to change lanes too. The car should avoid hitting other cars at all cost as well as driving inside of the marked road lanes at all times, unless going from one lane to another. The car should be able to make one complete loop around the 6946m highway. Since the car is trying to go 50 MPH, it should take a little over 5 minutes to complete 1 loop. Also the car should not experience total acceleration over 10 m/s^2 and jerk that is greater than 10 m/s^3.
 
-#### Requirements summary
+[//]: # (Image References)
+[image1]: ./images/no_car_in_ahead_2.png
+[image2]: ./images/no_car_in_ahead.png
+[image3]: ./images/overtaking_red_car.png
+[image4]: ./images/overtook_red_car.png
+[image5]: ./images/path_planner.png
+[image6]: ./images/target_dist.png
+
+#### Requirements summary for valid trajectories
 * The car is able to drive at least 4.32 miles without incident
+
+![alt text][image2]
+
 * The car drives according to the speed limit.
+
+![alt text][image1]
+
 * Max Acceleration and Jerk are not Exceeded
 * Car does not have collisions
 * The car stays in its lane, except for the time between changing lanes
+
+![alt text][image3]
+
 * The car is able to change lanes
---> Valid Trajectories
+
+![alt text][image4]
 
 ### Model Documentation
+
+#### Overview
+
+![alt text][image5]
+
+#### PREDICTION
+
+Example data set of a vehicle which is in 30m range, behind the ego car and in lane 2 so right behind us and it seems to be that it's keeping this lane.
+```
+
+id    5
+x     1082.08
+y     1170.37
+vx    19.5193
+vy    7.4421
+s     301.402
+s_rel -25.1249
+d     10.149
+s.    -0.0990217
+d.    0.0502717
+cl    2
+pl    keep
+---------------------------------------
+No. of other vehicles in range of +/- 30m: 1
+No. of (OVs) lane changes detected:  0
+is_vehicle_left  0
+is_vehicle_right 1
+is_vehicle_front 0
+``` 
+
+```
+- `s_rel` : Relative distance to ego car. Negative means it's behind our ego car
+- `s.` :  s dot, change of S to time t. Neccessary as param for gaussian naive classifier
+- `d.` :  d dot, change of d to time t. Neccessary as param for gaussian naive classifier 
+- `cl` :  Current lane 
+- `pl`: Predicted lane in future for this vehicle returnd by gaussian naive classifier
+
+```
+
+#### BEHAVIOUR
+
+```
+if (is_vehicle_front) { 
+  // case: no vehicle left and it's possible to change
+  if (!is_vehicle_left && lane > 0) {          
+    lane--; 
+  // case: no vehicle right and it's possible to change
+  } else if (!is_vehicle_right && lane != 2) {
+    lane++; 
+  // case: it's not possible to change lanes so reduce speed
+  } else {
+    speed_diff -= 0.224;
+  }
+} else {
+  // case: no vehicle in front so increase speed to the allowed limit
+  if (ref_vel < 49.5) {
+    speed_diff += 0.224;
+  }
+}
+```
+
+#### TRAJECTORY
+
+![alt text][image6]
 
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).
