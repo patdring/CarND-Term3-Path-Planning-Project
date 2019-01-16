@@ -34,14 +34,18 @@ In this project your goal is to safely navigate around a virtual highway with ot
 ### Model Documentation
 
 #### Overview
+Path Planning includes the six components Behaviour, Prediction, Localization, Trajectory, Sensor Fusion and Motion Control. The components marked green in the following diagram are to be implemented in this project.
 
 ![alt text][image5]
 
 #### PREDICTION
+This component tries to predict where other vehicles might be in the near future.
 
-Example data set of a vehicle which is in 30m range, behind the ego car and in lane 2 so right behind us and it seems to be that it's keeping this lane.
+In addition to predicting at which position S a vehicle will be (a possible trajectory), a possible change of lane is also predicted. For this purpose a Gaussian Naive Bayes classifier is used. The corresponding exercise from the "Prediction" module was used as code base and training data. So a hybrid approach is used that combines a model-based and a data driven approach.
+
+Example data set of a vehicle which is in 30m range, behind the ego car and in lane 2 so right behind us and it seems to be that it's keeping lane.
+
 ```
-
 id    5
 x     1082.08
 y     1170.37
@@ -64,14 +68,20 @@ is_vehicle_front 0
 
 ```
 - `s_rel` : Relative distance to ego car. Negative means it's behind our ego car
-- `s.` :  s dot, change of S to time t. Neccessary as param for gaussian naive classifier
-- `d.` :  d dot, change of d to time t. Neccessary as param for gaussian naive classifier 
+- `s.` :  s dot, change of S to time t. Neccessary as param for Gaussian Naive Bayes classifier
+- `d.` :  d dot, change of d to time t. Neccessary as param for Gaussian Naive Bayes classifier 
 - `cl` :  Current lane 
-- `pl`: Predicted lane in future for this vehicle returnd by gaussian naive classifier
-
+- `pl`: Predicted lane in future for this vehicle returnd by Gaussian Naive Bayes classifier
 ```
 
+Finally a vector containing all vehicles will be reduced to the vehicles within a range of +/- 30m. Flags are used to record where these vehicles are or will be located relative to your own vehicle.
+
 #### BEHAVIOUR
+This component determines where the ego vehicle must be in the future. Specifically, the maneuvers "Keep Lane", "Change Left" or "Change Right". In general, of course, more like stopping at traffic lights or intersections, roundabouts, emergency stops and more.
+
+Cost functions are used for complex planning. Cost functions are used to select the best trajectory but for the mentioned simple manoeuvres this is omitted and the already mentioned flags are used.
+
+The following code snippet now implements the behavior of the ego vehicle.
 
 ```
 if (is_vehicle_front) { 
