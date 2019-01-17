@@ -67,10 +67,10 @@ is_vehicle_front 0
 ``` 
 
 ```
-- `s_rel` : Relative distance to ego car. Negative means it's behind our ego car
-- `s.` :  s dot, change of S to time t. Neccessary as param for Gaussian Naive Bayes classifier
-- `d.` :  d dot, change of d to time t. Neccessary as param for Gaussian Naive Bayes classifier 
-- `cl` :  Current lane 
+- `s_rel`: Relative distance to ego car. Negative means it's behind our ego car
+- `s.`: s dot, change of S to time t. Neccessary as param for Gaussian Naive Bayes classifier
+- `d.`: d dot, change of d to time t. Neccessary as param for Gaussian Naive Bayes classifier 
+- `cl`: Current lane 
 - `pl`: Predicted lane in future for this vehicle returnd by Gaussian Naive Bayes classifier
 ```
 
@@ -104,8 +104,26 @@ if (is_vehicle_front) {
 ```
 
 #### TRAJECTORY
+The creation of a trajectory is based on the idea presented in the course video "Project Q&A".
 
-![alt text][image6]
+1. Save size of points of a previous path
+2. Creating reference values of x,y and yaw
+3. If there are not enough points of a previous path, we use the data of the ego car to find a previous point and store these two in a vector
+4. If points of a previous path are existing then the last two points are simply added to the vectors and the last point is set as reference
+5. Now 3 points are defined which are in the future. These points are determined with the waypoints of the map
+6. Add remaining previous points to the vectors
+7. A spline is used for the trajectory generation. The library for this is easy to use and there are no dependencies
+    - https://en.wikipedia.org/wiki/Spline_(mathematics)
+    - http://kluge.in-chemnitz.de/opensource/spline/
+7. Find the all spline points next 30m so that spacing the way that ego car can travel at desired speed
+   ```
+   double target_x = 30.0;
+   double target_y = s(target_x);
+   double target_dist = sqrt(target_x*target_x + target_y*target_y);
+   ```
+   ![alt text][image6]
+8. Calculate the spline points (50-previous_points) from start to horizon y points
+9. Transfer of the final control values to the simulator
 
 ### Simulator.
 You can download the Term3 Simulator which contains the Path Planning Project from the [releases tab (https://github.com/udacity/self-driving-car-sim/releases/tag/T3_v1.2).
